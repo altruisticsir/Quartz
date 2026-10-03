@@ -62,6 +62,42 @@ static void replace(V &vector, T old_value, T new_value) {
     std::replace(vector.begin(), vector.end(), old_value, new_value);
 }
 
+/**
+ * @param vector Target vector
+ * @param target Target value
+ * @returns Whether a specified value exists
+ * in the provided vector
+ */
+template <typename V, typename T>
+static bool find(V &vector, T target) {
+    auto iterator = std::find(vector.begin(), vector.end(), target);
+    return (iterator != vector.end());
+}
+
+/**
+ * @brief Pushes items into a provided vector.
+ * @param vector Target vector
+ * @param args The items; takes
+ * any quantity
+ */
+template <typename V, typename... Args>
+static void push(V &vector, const Args&... args) {
+    (vector.push_back(args), ...);
+}
+
+/**
+ * @brief Pops the top value from a
+ * provided vector.
+ * @param vector Target vector
+ * @returns Popped value
+ */
+template <typename V>
+static auto pop(V &vector) {
+    auto back = vector.back();
+    vector.pop_back();
+    return back;
+}
+
 namespace Parser {
     ulong index = 0;
 
@@ -70,6 +106,13 @@ namespace Parser {
 
     string_vector instruction_set;
 
+    /* List of words that are keywords;
+    will be used in evaluate to determine 
+    what is an identifier and what is not */
+    string_vector keywords = {
+        "let"
+    };
+
     /**
      * @brief Skips the index by
      * a specified amount.
@@ -77,6 +120,10 @@ namespace Parser {
      */
     static void skip(uint by = 0) {
         index += by;
+        if (index >= tokens.size()) {
+            std::cout << "Index exceeded size of token list\n";
+            std::exit(1);
+        }
     }
 
     /**
@@ -106,7 +153,7 @@ namespace Parser {
     static std::string get_rc_data() {
         const std::string &row = std::to_string(rc_data[index].first);
         const std::string &column = std::to_string(rc_data[index].second);
-        return std::string("(row " + row + ", column " + column + ")");
+        return std::string("(line:" + row + " char:" + column + ")");
     }
 
     /**
@@ -168,16 +215,13 @@ namespace Parser {
                 if (op_check(false)) break;
 
                 /* NUMBER x */
-                stack.push_back("NUMBER");
-                stack.push_back(t);
+                push(stack, "NUMBER", t);
 
             } else if (t[0] == '"') {
                 /* String literal */
                 if (op_check(false)) break;
 
-                stack.push_back("STRING");
-                stack.push_back(t);
-                stack.push_back("STRING_END");
+                push(stack, "STRING", t, "STRING_END");
 
                 /* Quotation mark is
                 retained so that the
@@ -189,24 +233,23 @@ namespace Parser {
             } else if (t == "nil") {
                 /* Nil value */
                 if (op_check(false)) break;
-                stack.push_back("NIL");
+                push(stack, "NIL");
 
             } else if (t == "(") {
                 /* Opening paren; capture content */
-                queue.push_back(t);
+                push(queue, t);
                 
             } else if (t == ")") {
                 /* Closing paren; dump what was captured
                 onto the stack */
                 while (queue.size() > 0 && queue.back() != "(") {
                     /* Pop from queue and add to stack */
-                    stack.push_back(queue.back());
-                    queue.pop_back();
+                    push(stack, pop(queue));
                 }
 
                 /* Try to find an opening paren */
-                auto search = std::find(queue.begin(), queue.end(), "(");
-                if (search != queue.end()) queue.pop_back();
+
+                if (find(queue, "(")) queue.pop_back();
                 else break;
 
             } else if (precedence.count(t)) {
@@ -218,17 +261,21 @@ namespace Parser {
                     if (!precedence.count(top)) break;
 
                     if (precedence[top] >= precedence[t]) {
-                        stack.push_back(queue.back());
-                        queue.pop_back();
+                        push(stack, pop(queue));
                     } else break;
-
-                    index++;
                 }
 
-                queue.push_back(t);
+                push(queue, t);
             } else {
-                /* Some unknown symbol */
+                if (find(keywords, t)) {
+                    index--;
+                    break;
+                }
                 if (op_check(false)) break;
+
+                /* Definitely a variable;
+                add fetch commands from ID */
+                push(stack, "NUMBER", "*" + t, "FETCH");
             }
 
             index++;
@@ -237,8 +284,7 @@ namespace Parser {
         /* Dump what's left of the queue
         into the stack */
         while (queue.size() > 0) {
-            stack.push_back(queue.back());
-            queue.pop_back();
+            push(stack, pop(queue));
         }
 
         replace(stack, "+", "ADD");
@@ -267,7 +313,7 @@ namespace Parser {
                 /* Current argument is a vector; loop through
                 and add each element inside to the instruction
                 set */
-                for (auto i : x) instruction_set.push_back(i);
+                for (auto i : x) push(instruction_set, i);
 
             } else if constexpr (
                    std::is_same_v<T, std::string>
@@ -276,7 +322,7 @@ namespace Parser {
             ) {
                 /* Current argument is a string; add to the
                 instruction set directly */
-                instruction_set.push_back(x);
+                push(instruction_set, x);
 
             } else {
                 /* Unknown */
@@ -305,12 +351,12 @@ namespace Parser {
                 expect("=", 1);
                 skip(1); /* Skip '=' */
 
-                add_instructions(evaluate(), "*" + name, "SET");
+                add_instructions(evaluate(), "NUMBER", "*" + name, "SET");
             }
 
             index++;
         }
-        for (auto i : instruction_set) std::cout << i << '\n';
+        for (auto i : instruction_set) std::cout << i << ' ';
     }
 }
 

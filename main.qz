@@ -1,1 +1,1 @@
-let var = 3 * 3
+let name = 'hullo' + 30
