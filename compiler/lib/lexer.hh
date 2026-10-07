@@ -97,6 +97,15 @@ namespace Lexer {
                 column = 0; /* Reset character position */
             }
             if (iswspace(c)) continue; /* Whitespace is skipped */
+
+            if (c == '#') {
+                /* Comment */
+                while (getc(file) && !file.eof() && c != '\n');
+                /* Unread so that the new cycle can see the newline */
+                if (!file.eof()) ungetc(file);
+                continue;
+            }
+
             if (isdigit(c)) {
                 /* Numeric */
 
