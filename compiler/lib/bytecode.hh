@@ -8,6 +8,12 @@
 #include <cstdint>
 #include <array>
 #include <unordered_map>
+#include <format>
+#include "output.hh"
+
+/* How many times confirmation necessary bytes need
+to show up in a row */
+constexpr uint8_t MARKER_ROW = 8;
 
 typedef std::vector<std::string> string_vector;
 typedef std::vector<uint8_t> byte_vector;
@@ -58,6 +64,8 @@ namespace Bytecode {
 
         "SET",
         "FETCH", "TABLE_FETCH",
+
+        "START_PGM", "END_PGM",
     };
     
     std::unordered_map<std::string, uint8_t> conversions;
@@ -69,11 +77,36 @@ namespace Bytecode {
     static void populate_conversions() {
         /* Where the bytes assigned start */
         uint8_t count = 1;
+        std::string definitions; /* Conversions to export */
+
+        Output::string_append(
+            definitions,
+            "#ifndef CODES",
+            "#define CODES",
+            std::format("#define MARKER_ROW {}", MARKER_ROW - 1)
+        );
 
         for (auto k : keys) {
             /* Assign; overwrite */
-            conversions[k] = count++;
+            conversions[k] = count;
+
+            /* Add key + value pair as C-style definition to
+            the definitions string */
+            Output::string_append(
+                definitions,
+                std::format("#define {} 0x{:02X}U", k, count)
+            );
+
+            count++;
         }
+
+        /* Export */
+        Output::string_append(
+            definitions,
+            "#endif"
+        );
+
+        Output::write("interpreter/lib/codes.h", definitions);
     }
 
     /**
@@ -152,11 +185,8 @@ namespace Bytecode {
         return variables[name];
     }
 
-    void process(string_vector instruction_set){
+    auto process(string_vector instruction_set){
         populate_conversions();
-
-        for (auto i : instruction_set) std::cout << i << ' ';
-        std::cout << '\n';
 
         for (auto i : instruction_set) {
             /* Goes through each instruction
@@ -204,9 +234,7 @@ namespace Bytecode {
                 std::cout << "Unhandled instruction |> " << i << '\n';
             }
         }
-        for (auto b : byte_set) {
-            std::printf("%02X ", b);
-        }
+        return byte_set;
     }
 }
 

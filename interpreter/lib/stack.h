@@ -20,6 +20,7 @@ typedef struct {
     uint8_t type;
 } value;
 
+/* LIFO stack */
 typedef struct {
     value items[MAX_STACK_SIZE];
     uint top;

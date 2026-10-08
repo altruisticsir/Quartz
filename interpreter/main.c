@@ -2,10 +2,12 @@
     #define SANDBOXED
     #include <stdio.h>
 #endif
+
 #include "lib/exec.h"
 
 int main(void) {
     exec_init();
+    
     #ifdef SANDBOXED
         /* Sandboxed; should read from a bytecode
         file in the directory */
@@ -26,6 +28,8 @@ int main(void) {
 
         fclose(file);
     #endif
+
+    for (;;) exec_step();
 
     return 0;
 }

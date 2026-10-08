@@ -7,6 +7,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <algorithm>
+#include "output.hh"
 
 typedef unsigned long ulong;
 typedef unsigned  int  uint;
@@ -138,10 +139,7 @@ namespace Parser {
      */
     static void skip(uint by = 0) {
         index += by;
-        if (index >= tokens.size()) {
-            std::cout << "Index exceeded size of token list\n";
-            std::exit(1);
-        }
+        if (index >= tokens.size()) Output::error("unpaired paren/bracket");
     }
 
     /**
@@ -187,7 +185,7 @@ namespace Parser {
      */
     static void expect(const std::string &expected, uint offset = 0) {
         if (get(offset) != expected) {
-            std::cout << "Expected \"" << expected << "\", got \"" << get() << "\" instead " << get_rc_data() << '\n';
+            Output::error("Expected \"" + expected + "\", got \"" + get() + "\" instead " + get_rc_data());
             std::exit(1);
         }
     }
@@ -223,7 +221,7 @@ namespace Parser {
 
             } else {
                 /* Unknown */
-                std::cout << "Attempted to add an unhandled type to the instruction set\n";
+                Output::error("Attempted to add an unhandled type to the instruction set");
             }
         };
 
@@ -425,7 +423,7 @@ namespace Parser {
 
             index++;
         }
-        std::cout << "Block has no end " << get_rc_data() << '\n';
+        Output::error("Block has no end " + get_rc_data());
     }
 
     /**
@@ -493,10 +491,22 @@ namespace Parser {
         tokens = t;
         rc_data = r;
 
+        /* START_PGM and END_PGM are repeated
+        so that the interpreter has NO doubt on
+        the intent of the program structure */
+        for (int i = 0; i < 8; i++)
+            add_instructions("START_PGM");
+
         while (index < tokens.size()) {
             parse_chunk();
             index++;
         }
+
+        for (int i = 0; i < 8; i++)
+            add_instructions("END_PGM");
+
+        for (auto i : instruction_set)
+            std::cout << i << ' ';
         
         return instruction_set;
     }
