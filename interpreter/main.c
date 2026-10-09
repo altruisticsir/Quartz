@@ -1,5 +1,6 @@
 #ifdef _WIN32
     #define SANDBOXED
+    // #define VERBOSE
     #include <stdio.h>
 #endif
 

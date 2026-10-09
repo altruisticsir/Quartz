@@ -352,6 +352,7 @@ namespace Parser {
                         /* evaluate() is the index in question */
                         skip(2);
                         push(stack, evaluate(), "NUMBER", "*" + t, "INDEX_ACCESS");
+                        skip(1); /* skip ] */
                     }
                 }
 
@@ -375,11 +376,12 @@ namespace Parser {
             
             /* Evaluating a table */
             string_vector stack;
+            std::string table_pointer = std::to_string(unique_id());
 
             skip(1); /* skip { */
 
             /* & indicates a table pointer. Tables are stored separately from variables. */
-            push(stack, "NUMBER", "&" + std::to_string(unique_id()));
+            push(stack, "NUMBER", "&" + table_pointer);
 
             /* Pushes a table pointer to the stack
             (so just the table ID) */
@@ -387,12 +389,11 @@ namespace Parser {
 
             while (peek() != "}") {
                 /* While the table isn't at its end */
-                push(stack, evaluate(), "SET"); /* Set lets the 
-                interpreter know when to push an element onto the table */
+                push(stack, evaluate(), "SET"); /* Push element */
                 skip(1); /* to , or } */
             }
 
-            push(stack, "TABLE_END");
+            push(stack, "TABLE_END", "NUMBER", "&" + table_pointer);
             /* When fetching a table, it still uses *.
             But, it uses TABLE_FETCH instead of FETCH. */
 
@@ -482,6 +483,13 @@ namespace Parser {
             collect_block();
             add_instructions("LOOP_END");
         }
+        if (t == "print") {
+            /* Basic print, just evaluate and push */
+            skip(1); /* skip print */
+            expect("(");
+            skip(1);
+            add_instructions(evaluate(), "PRINT");
+        }
     }
 
     string_vector process(string_vector t, pair_vector<ulong, ulong> r) {
@@ -504,9 +512,6 @@ namespace Parser {
 
         for (int i = 0; i < 8; i++)
             add_instructions("END_PGM");
-
-        for (auto i : instruction_set)
-            std::cout << i << ' ';
         
         return instruction_set;
     }

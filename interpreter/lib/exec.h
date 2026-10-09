@@ -27,13 +27,36 @@
      * and returns the result.
      */
     #define FORMAT(format, ...) ({  \
-        static char _buf[256]; \
+        static char _buf[MAX_STRING_LEN]; \
         snprintf(_buf, sizeof(_buf), format, __VA_ARGS__); \
         _buf; \
     })
 
+    #if defined(SANDBOXED)
+        #define OUT(content) printf("%s\n", content);
+
+        /**
+         * @brief Returns the value of a value object
+         * (number or string) as a string
+         */
+        static const char* val(value *v) {
+            if (v->type == NUMBER) {
+                return FORMAT("%g", v->number);
+            } else {
+                return v->string;
+            }
+        }
+    #else
+        static const char* val(value *v) {}
+    #endif
+
     /* Prints <g>[label]:</g> content */
-    #define LOG(label, content) printf("%s[%s]:%s %s\n", GREEN, label, RST, content);
+    #if defined(SANDBOXED) && defined(VERBOSE)
+        #define LOG(label, content) OUT(FORMAT("%s[%s]:%s %s", GREEN, label, RST, content));
+    #else
+        #define LOG(label, content);
+    #endif
+
 
     /**
      * @brief Prints <r>[error]:</r> content
@@ -69,9 +92,13 @@ uint8_t pgm[MAX_PGM_SIZE] = {0};
         uint8_t end_row = 0;
 
 stack s;
+value variables[32]; /* Holds variables and function + table pointers */
+
+stack tables; /* Holds actual table content */
 
 void exec_init() {
     stack_init(&s);
+    stack_init(&tables);
 }
 
 void exec_write(uint8_t byte) {
@@ -166,18 +193,160 @@ void exec_step(void) {
                 converter.b[i] = endian_bytes[i];
             }
 
-            #ifdef SANDBOXED
-                LOG(
-                    "number",
-                    FORMAT("pushed number [%g] to stack", converter.f)
-                );
-            #endif
+            LOG(
+                "number",
+                FORMAT("pushed number [%g] to stack", converter.f)
+            );
 
             stack_push(&s, (value){
                 .number = converter.f,
                 .type = NUMBER
             });
 
+            break;
+        }
+        case STRING: {
+            char str[MAX_STRING_LEN];
+            uint len = 0; /* String length */
+
+            /* Keep scanning string until terminator */
+            for (;;) {
+                str[len++] = pgm[pgm_index++];
+                if (pgm[pgm_index] == STRING_END) break;
+            }
+            str[len++] = '\0';
+
+            value result = {.type = STRING};
+            strncpy(result.string, str, sizeof(result.string));
+
+            LOG(
+                "string",
+                FORMAT("pushed string [%s] to stack", result.string)
+            );
+
+            stack_push(&s, result);
+
+            break;
+        }
+        case TABLE: {
+            value table_pointer = stack_pop(&s);
+            int element_count = 0;
+
+            for (;;) {
+                /* Process one element */
+                while (pgm[pgm_index] != SET) {
+                    exec_step();
+                }
+
+                LOG(
+                    "table",
+                    "pushed value into table"
+                );
+
+                value element = stack_pop(&s);
+                element.pointer = (uint)table_pointer.number;
+                element.index = element_count++;
+
+                stack_push(&tables, element);
+
+                /* Still on element byte; skip first and then check */
+                if (pgm[++pgm_index] == TABLE_END) break;
+            }
+
+            break;
+        }
+        case PRINT: {
+            value content = stack_pop(&s);
+            OUT(
+                val(&content)
+            );
+            break;
+        }
+        case FETCH: {
+            value variable_id = stack_pop(&s);
+            value fetched = variables[(uint)variable_id.number];
+            stack_push(&s, fetched);
+            LOG(
+                "variables",
+                FORMAT("fetched and pushed value [%s] to stack", val(&fetched))
+            )
+            break;
+        }
+        case SET: {
+            /* Save a variable with a value */
+            value variable_id = stack_pop(&s);
+            value content = stack_pop(&s);
+
+            LOG(
+                "variables",
+                FORMAT("Set variable [%s] to [*%g]", val(&content), variable_id.number)
+            )
+
+            /* Store */
+            variables[(uint)variable_id.number] = content;
+
+            break;
+        }
+        case INDEX_ACCESS: {
+            /* From variable */
+            value table_pointer = stack_pop(&s);
+            value index = stack_pop(&s);
+
+            stack_push(&s, stack_find(&tables, table_pointer, index));
+
+            break;
+        }
+        case ADD:
+        case SUB:
+        case MUL:
+        case DIV: {
+            value right = stack_pop(&s);
+            value left  = stack_pop(&s);
+
+            value result = {0};
+            result.type = NUMBER;
+
+            if (left.type == STRING || right.type == STRING) {
+                if (byte == ADD) {
+                    /* Attempt to concatenate string and number
+                    (either left or right), convert number to string */
+                    if (left.type == NUMBER) {
+                        strncpy(left.string, FORMAT("%g", left.number), sizeof(left.string));
+                        left.type = STRING;
+                    }
+                    if (right.type == NUMBER) {
+                        strncpy(right.string, FORMAT("%g", right.number), sizeof(right.string));
+                        right.type = STRING;
+                    }
+
+                    strncpy(result.string, FORMAT("%s%s", left.string, right.string), sizeof(result.string));
+                    result.type = STRING;
+                    
+                    LOG(
+                        "string",
+                        FORMAT("pushed string [%s] to stack", result.string)
+                    );
+                } else {
+                    result.type = NIL;
+                    LOG(
+                        "nil",
+                        "pushed nil to stack"
+                    );
+                }
+            } else {
+                /* Basic number <=> number math */
+                if (byte == ADD) result.number = left.number + right.number;
+                if (byte == SUB) result.number = left.number - right.number;
+                if (byte == MUL) result.number = left.number * right.number;
+                if (byte == DIV) result.number = left.number / right.number;
+
+                LOG(
+                    "number",
+                    FORMAT("pushed number [%g] to stack", result.number)
+                );
+            }
+            
+            stack_push(&s, result);
             break;
         }
     }

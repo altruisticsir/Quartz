@@ -56,14 +56,17 @@ namespace Bytecode {
     std::unordered_map<std::string, VariableInfo> variables;
     string_vector keys = {
         "NUMBER",
-
         "STRING", "STRING_END",
+        "NIL",
+
         "TABLE", "TABLE_END",
 
         "ADD", "SUB", "MUL", "DIV",
 
+        "PRINT",
+
         "SET",
-        "FETCH", "TABLE_FETCH",
+        "FETCH", "TABLE_FETCH", "INDEX_ACCESS",
 
         "START_PGM", "END_PGM",
     };
@@ -213,14 +216,14 @@ namespace Bytecode {
                 add_bytes(endian(index));
 
             } else if (i[0] == '&') {
-                /* Table pointer */
-                i.erase(0, 1); /* Registered as *x */
+                /* Table pointer; independent of variables
+                in terms of storage */
+                i.erase(0, 1);
 
-                /* Get variable information */
-                auto info = register_variable("*" + i, TABLE);
-
-                /* Push ID */
-                float index = (float)info.id;
+                /* Directly push ID; no registration
+                is required as the ID is already figured
+                out */
+                float index = std::stof(i);
                 add_bytes(endian(index));
 
             } else if (i[0] == '"') {

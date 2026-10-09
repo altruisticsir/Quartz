@@ -6,13 +6,18 @@ let table = {
     # that the element is pushed into
     # the table.
 
-    "Hello",  # STRING "Hello STRING_END SET
-    "to",  # STRING "to STRING_END SET
+    "Hello ",  # STRING "Hello STRING_END SET
+    "to ",  # STRING "to STRING_END SET
     "you!",  # STRING "you! STRING_END SET
 }
 
 # TABLE_END ... end table
 # NUMBER *table SET ... set table value to the variable "table"
 
-let x = table  # assign x to the pointer saved in the variable "table"
 let y = 3 * 3
+
+print(
+    "The result is: " +
+    table[1] + table[2] + table[3]
+)
+print("Wow!")
